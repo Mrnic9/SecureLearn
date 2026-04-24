@@ -1,162 +1,176 @@
-const { Pool } = require('pg');
-require('dotenv').config();
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'securelearn123',
-  database: process.env.DB_NAME || 'securelearn',
-});
-
-pool.on('error', (err) => {
-  console.error('Unexpected pool error:', err);
-  process.exit(-1);
-});
-
-// Script para crear tablas
-const initializeTables = async () => {
-  const client = await pool.connect();
-  try {
-    console.log('Inicializando base de datos...');
-
-    // Tabla de usuarios
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        uuid VARCHAR(36) UNIQUE NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        first_name VARCHAR(100) NOT NULL,
-        last_name VARCHAR(100) NOT NULL,
-        role VARCHAR(20) NOT NULL DEFAULT 'student',
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-    `);
-
-    // Tabla de auditoría
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS audit_logs (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        action VARCHAR(100) NOT NULL,
-        resource VARCHAR(100) NOT NULL,
-        details TEXT,
-        ip_address VARCHAR(45),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
-      CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
-    `);
-
-    // Tabla de cursos
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS courses (
-        id SERIAL PRIMARY KEY,
-        uuid VARCHAR(36) UNIQUE NOT NULL,
-        title VARCHAR(255) NOT NULL,
-        description TEXT,
-        category VARCHAR(100) NOT NULL,
-        level VARCHAR(20) DEFAULT 'beginner',
-        duration_minutes INTEGER,
-        instructor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        is_published BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      CREATE INDEX IF NOT EXISTS idx_courses_category ON courses(category);
-    `);
-
-    // Tabla de módulos
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS course_modules (
-        id SERIAL PRIMARY KEY,
-        uuid VARCHAR(36) UNIQUE NOT NULL,
-        course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-        title VARCHAR(255) NOT NULL,
-        content TEXT,
-        order_num INTEGER NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Tabla de enrollments
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS enrollments (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-        progress_percentage DECIMAL(5,2) DEFAULT 0,
-        completed_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, course_id)
-      );
-      CREATE INDEX IF NOT EXISTS idx_enrollments_user ON enrollments(user_id);
-    `);
-
-    // Tabla de quizzes
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS quizzes (
-        id SERIAL PRIMARY KEY,
-        uuid VARCHAR(36) UNIQUE NOT NULL,
-        course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-        title VARCHAR(255) NOT NULL,
-        passing_score DECIMAL(5,2) DEFAULT 70,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Tabla de preguntas del quiz
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS quiz_questions (
-        id SERIAL PRIMARY KEY,
-        uuid VARCHAR(36) UNIQUE NOT NULL,
-        quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-        question_text TEXT NOT NULL,
-        question_type VARCHAR(20) DEFAULT 'multiple_choice',
-        order_num INTEGER NOT NULL
-      );
-    `);
-
-    // Tabla de respuestas del quiz
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS quiz_answers (
-        id SERIAL PRIMARY KEY,
-        uuid VARCHAR(36) UNIQUE NOT NULL,
-        question_id INTEGER NOT NULL REFERENCES quiz_questions(id) ON DELETE CASCADE,
-        answer_text TEXT NOT NULL,
-        is_correct BOOLEAN DEFAULT false,
-        order_num INTEGER NOT NULL
-      );
-    `);
-
-    // Tabla de resultados de quiz
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS quiz_results (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-        score DECIMAL(5,2),
-        passed BOOLEAN,
-        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    console.log('✅ Base de datos inicializada correctamente');
-  } catch (err) {
-    console.error('❌ Error inicializando base de datos:', err.message);
-  } finally {
-    client.release();
+// Crear/abrir BD SQLite
+const dbPath = path.join(__dirname, '../../securelearn.db');
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error('❌ Error abriendo BD:', err.message);
+  } else {
+    console.log('✅ BD SQLite abierta:', dbPath);
   }
+});
+
+// Wrapper para promesas
+const run = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function(err) {
+      if (err) reject(err);
+      else resolve(this);
+    });
+  });
 };
 
-// Ejecutar si es llamado directamente
-if (require.main === module) {
-  initializeTables();
+const all = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
+};
+
+const get = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
+};
+
+// Pool simulado para compatibilidad
+class Pool {
+  async query(sql, params = []) {
+    try {
+      const rows = await all(sql, params);
+      return { rows };
+    } catch (err) {
+      throw err;
+    }
+  }
 }
 
-module.exports = { pool, initializeTables };
+const pool = new Pool();
+
+// Inicializar tablas
+const initializeTables = async () => {
+  console.log('📍 Creando tablas SQLite...');
+
+  const tables = [
+    `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      role TEXT DEFAULT 'student',
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      action TEXT NOT NULL,
+      resource TEXT NOT NULL,
+      details TEXT,
+      ip_address TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS courses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      category TEXT NOT NULL,
+      level TEXT DEFAULT 'beginner',
+      duration_minutes INTEGER,
+      instructor_id INTEGER,
+      is_published INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(instructor_id) REFERENCES users(id)
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS course_modules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE NOT NULL,
+      course_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT,
+      order_num INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(course_id) REFERENCES courses(id)
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS enrollments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      course_id INTEGER NOT NULL,
+      progress_percentage REAL DEFAULT 0,
+      completed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, course_id),
+      FOREIGN KEY(user_id) REFERENCES users(id),
+      FOREIGN KEY(course_id) REFERENCES courses(id)
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS quizzes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE NOT NULL,
+      course_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      passing_score REAL DEFAULT 70,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(course_id) REFERENCES courses(id)
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS quiz_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE NOT NULL,
+      quiz_id INTEGER NOT NULL,
+      question_text TEXT NOT NULL,
+      question_type TEXT DEFAULT 'multiple_choice',
+      order_num INTEGER NOT NULL,
+      FOREIGN KEY(quiz_id) REFERENCES quizzes(id)
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS quiz_answers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uuid TEXT UNIQUE NOT NULL,
+      question_id INTEGER NOT NULL,
+      answer_text TEXT NOT NULL,
+      is_correct INTEGER DEFAULT 0,
+      order_num INTEGER NOT NULL,
+      FOREIGN KEY(question_id) REFERENCES quiz_questions(id)
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS quiz_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      quiz_id INTEGER NOT NULL,
+      score REAL,
+      passed INTEGER,
+      completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id),
+      FOREIGN KEY(quiz_id) REFERENCES quizzes(id)
+    )`
+  ];
+
+  for (const sql of tables) {
+    try {
+      await run(sql);
+    } catch (err) {
+      // Tabla ya existe, es normal
+    }
+  }
+
+  console.log('✅ Tablas creadas/verificadas');
+};
+
+module.exports = { pool, db, run, all, get, initializeTables };

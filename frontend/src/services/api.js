@@ -1,75 +1,116 @@
+import securityService from './security';
+
 const API_URL = 'http://localhost:5000/api';
 
+const handleResponse = async (response) => {
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || `Error: ${response.status}`);
+  }
+  return data;
+};
+
 export const getAuthHeader = () => {
-  const token = localStorage.getItem('token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const token = localStorage.getItem('token') || sessionStorage.getItem('auth_token');
+  const csrfToken = sessionStorage.getItem('csrf_token') || securityService.generateCSRFToken();
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  return headers;
 };
 
 // Auth endpoints
 export const authAPI = {
-  register: (email, password, firstName, lastName) =>
-    fetch(`${API_URL}/auth/register`, {
+  register: async (email, password, firstName, lastName) => {
+    const response = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeader(),
       body: JSON.stringify({ email, password, firstName, lastName })
-    }).then(r => r.json()),
+    });
+    return handleResponse(response);
+  },
 
-  login: (email, password) =>
-    fetch(`${API_URL}/auth/login`, {
+  login: async (email, password) => {
+    const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeader(),
       body: JSON.stringify({ email, password })
-    }).then(r => r.json()),
+    });
+    return handleResponse(response);
+  },
 
-  verify: () =>
-    fetch(`${API_URL}/auth/verify`, {
+  verify: async () => {
+    const response = await fetch(`${API_URL}/auth/verify`, {
       headers: getAuthHeader()
-    }).then(r => r.json())
+    });
+    return handleResponse(response);
+  }
 };
 
 // User endpoints
 export const userAPI = {
-  getMe: () =>
-    fetch(`${API_URL}/users/me`, {
+  getMe: async () => {
+    const response = await fetch(`${API_URL}/users/me`, {
       headers: getAuthHeader()
-    }).then(r => r.json()),
+    });
+    return handleResponse(response);
+  },
 
-  updateProfile: (firstName, lastName) =>
-    fetch(`${API_URL}/users/me`, {
+  updateProfile: async (firstName, lastName) => {
+    const response = await fetch(`${API_URL}/users/me`, {
       method: 'PUT',
-      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+      headers: getAuthHeader(),
       body: JSON.stringify({ firstName, lastName })
-    }).then(r => r.json()),
+    });
+    return handleResponse(response);
+  },
 
-  listUsers: () =>
-    fetch(`${API_URL}/users`, {
+  listUsers: async () => {
+    const response = await fetch(`${API_URL}/users`, {
       headers: getAuthHeader()
-    }).then(r => r.json())
+    });
+    return handleResponse(response);
+  }
 };
 
 // Course endpoints
 export const courseAPI = {
-  list: () =>
-    fetch(`${API_URL}/courses`).then(r => r.json()),
+  list: async () => {
+    const response = await fetch(`${API_URL}/courses`);
+    return handleResponse(response);
+  },
 
-  getById: (id) =>
-    fetch(`${API_URL}/courses/${id}`).then(r => r.json()),
+  getById: async (id) => {
+    const response = await fetch(`${API_URL}/courses/${id}`);
+    return handleResponse(response);
+  },
 
-  create: (courseData) =>
-    fetch(`${API_URL}/courses`, {
+  create: async (courseData) => {
+    const response = await fetch(`${API_URL}/courses`, {
       method: 'POST',
-      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+      headers: getAuthHeader(),
       body: JSON.stringify(courseData)
-    }).then(r => r.json()),
+    });
+    return handleResponse(response);
+  },
 
-  enroll: (courseId) =>
-    fetch(`${API_URL}/courses/${courseId}/enroll`, {
+  enroll: async (courseId) => {
+    const response = await fetch(`${API_URL}/courses/${courseId}/enroll`, {
       method: 'POST',
       headers: getAuthHeader()
-    }).then(r => r.json()),
+    });
+    return handleResponse(response);
+  },
 
-  getProgress: (courseId) =>
-    fetch(`${API_URL}/courses/${courseId}/progress`, {
+  getProgress: async (courseId) => {
+    const response = await fetch(`${API_URL}/courses/${courseId}/progress`, {
       headers: getAuthHeader()
-    }).then(r => r.json())
+    });
+    return handleResponse(response);
+  }
 };

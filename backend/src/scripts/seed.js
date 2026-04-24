@@ -1,5 +1,6 @@
-const { pool } = require('../config/database');
+const { db, run, get } = require('../config/database');
 const authService = require('../services/authService');
+const { v4: uuidv4 } = require('uuid');
 
 const seedDatabase = async () => {
   try {
@@ -79,22 +80,22 @@ const seedDatabase = async () => {
     ];
 
     // Obtener ID del instructor
-    const instructorResult = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
-      ['instructor@securelearn.local']
-    );
+    const instructor = await get('SELECT id FROM users WHERE email = ?', ['instructor@securelearn.local']);
 
-    if (instructorResult.rows.length > 0) {
-      const instructorId = instructorResult.rows[0].id;
-
+    if (instructor) {
       for (const course of testCourses) {
-        const { v4: uuidv4 } = require('uuid');
         try {
-          await pool.query(
-            `INSERT INTO courses (uuid, title, description, category, level, duration_minutes, instructor_id, is_published)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
-            [uuidv4(), course.title, course.description, course.category, course.level, course.durationMinutes, instructorId]
-          );
+          await new Promise((resolve, reject) => {
+            db.run(
+              `INSERT INTO courses (uuid, title, description, category, level, duration_minutes, instructor_id, is_published)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+              [uuidv4(), course.title, course.description, course.category, course.level, course.durationMinutes, instructor.id],
+              function(err) {
+                if (err) reject(err);
+                else resolve();
+              }
+            );
+          });
           console.log(`✅ Curso creado: ${course.title}`);
         } catch (err) {
           console.log(`⚠️  Error creando curso: ${err.message}`);

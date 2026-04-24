@@ -1,5 +1,5 @@
 const express = require('express');
-const { pool } = require('../config/database');
+const { get, all, run } = require('../config/database');
 const { authMiddleware, requireRole } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -7,16 +7,15 @@ const router = express.Router();
 // Obtener perfil del usuario actual
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT id, uuid, email, first_name, last_name, role, created_at FROM users WHERE id = $1',
+    const user = await get(
+      'SELECT id, uuid, email, first_name, last_name, role, created_at FROM users WHERE id = ?',
       [req.user.id]
     );
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    const user = result.rows[0];
     res.json({
       id: user.id,
       uuid: user.uuid,
@@ -34,22 +33,22 @@ router.get('/me', authMiddleware, async (req, res) => {
 // Listar usuarios (solo admin)
 router.get('/', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
-    const result = await pool.query(
+    const users = await all(
       'SELECT id, uuid, email, first_name, last_name, role, is_active, created_at FROM users LIMIT 100'
     );
 
-    const users = result.rows.map(u => ({
+    const formatted = users.map(u => ({
       id: u.id,
       uuid: u.uuid,
       email: u.email,
       firstName: u.first_name,
       lastName: u.last_name,
       role: u.role,
-      isActive: u.is_active,
+      isActive: u.is_active === 1,
       createdAt: u.created_at
     }));
 
-    res.json({ users, total: users.length });
+    res.json({ users: formatted, total: formatted.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -64,18 +63,13 @@ router.put('/me', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'firstName y lastName son requeridos' });
     }
 
-    const result = await pool.query(
-      `UPDATE users SET first_name = $1, last_name = $2, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
-       RETURNING id, uuid, email, first_name, last_name, role`,
+    await run(
+      'UPDATE users SET first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [firstName, lastName, req.user.id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
-    }
+    const user = await get('SELECT id, uuid, email, first_name, last_name, role FROM users WHERE id = ?', [req.user.id]);
 
-    const user = result.rows[0];
     res.json({
       message: 'Perfil actualizado',
       user: {

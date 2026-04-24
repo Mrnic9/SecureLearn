@@ -1,30 +1,24 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { pool } = require('../config/database');
+const { db, run, get } = require('../config/database');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_change_in_production_at_least_32_chars_long!';
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '7d';
 
 class AuthService {
   async register(email, password, firstName, lastName, role = 'student') {
-    // Validar email
     if (!email || !email.includes('@')) {
       throw new Error('Email inválido');
     }
 
-    // Validar contraseña (mínimo 8 caracteres)
     if (!password || password.length < 8) {
       throw new Error('La contraseña debe tener al menos 8 caracteres');
     }
 
     // Verificar si el email ya existe
-    const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
-
-    if (existingUser.rows.length > 0) {
+    const existing = await get('SELECT id FROM users WHERE email = ?', [email.toLowerCase()]);
+    if (existing) {
       throw new Error('El email ya está registrado');
     }
 
@@ -33,48 +27,44 @@ class AuthService {
 
     // Crear usuario
     const userId = uuidv4();
-    const result = await pool.query(
-      `INSERT INTO users (uuid, email, password_hash, first_name, last_name, role)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, uuid, email, first_name, last_name, role, created_at`,
-      [userId, email.toLowerCase(), passwordHash, firstName, lastName, role]
-    );
-
-    const user = result.rows[0];
-
-    // Log de auditoría
-    await this.logAudit(null, 'USER_REGISTERED', 'user', user.id);
+    const result = await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT INTO users (uuid, email, password_hash, first_name, last_name, role)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [userId, email.toLowerCase(), passwordHash, firstName, lastName, role],
+        function(err) {
+          if (err) reject(err);
+          else resolve({ id: this.lastID, uuid: userId });
+        }
+      );
+    });
 
     return {
-      id: user.id,
-      uuid: user.uuid,
-      email: user.email,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      role: user.role,
-      createdAt: user.created_at
+      id: result.id,
+      uuid: result.uuid,
+      email: email.toLowerCase(),
+      firstName,
+      lastName,
+      role,
+      createdAt: new Date()
     };
   }
 
   async login(email, password) {
     // Buscar usuario
-    const result = await pool.query(
-      'SELECT id, uuid, email, password_hash, first_name, last_name, role FROM users WHERE email = $1 AND is_active = true',
+    const user = await get(
+      'SELECT id, uuid, email, password_hash, first_name, last_name, role FROM users WHERE email = ? AND is_active = 1',
       [email.toLowerCase()]
     );
 
-    if (result.rows.length === 0) {
+    if (!user) {
       throw new Error('Email o contraseña incorrectos');
     }
-
-    const user = result.rows[0];
 
     // Verificar contraseña
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!isValidPassword) {
-      // Log de intento fallido
-      await this.logAudit(user.id, 'LOGIN_FAILED', 'auth', null);
       throw new Error('Email o contraseña incorrectos');
     }
 
@@ -90,9 +80,6 @@ class AuthService {
       { expiresIn: JWT_EXPIRY }
     );
 
-    // Log de auditoría
-    await this.logAudit(user.id, 'LOGIN_SUCCESS', 'auth', null);
-
     return {
       token,
       user: {
@@ -104,18 +91,6 @@ class AuthService {
         role: user.role
       }
     };
-  }
-
-  async logAudit(userId, action, resource, details) {
-    try {
-      await pool.query(
-        `INSERT INTO audit_logs (user_id, action, resource, details)
-         VALUES ($1, $2, $3, $4)`,
-        [userId, action, resource, JSON.stringify(details)]
-      );
-    } catch (err) {
-      console.error('Error logging audit:', err);
-    }
   }
 
   verifyToken(token) {

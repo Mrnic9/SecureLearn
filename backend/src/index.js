@@ -2,12 +2,16 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { Client } = require('pg');
 require('dotenv').config();
 
 const { pool, initializeTables } = require('./config/database');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const courseRoutes = require('./routes/courseRoutes');
+const moduleRoutes = require('./routes/moduleRoutes');
+const quizRoutes = require('./routes/quizRoutes');
+const certificateRoutes = require('./routes/certificateRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -40,6 +44,9 @@ app.use((req, res, next) => {
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/courses', courseRoutes);
+app.use('/api/modules', moduleRoutes);
+app.use('/api/quizzes', quizRoutes);
+app.use('/api/certificates', certificateRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -92,27 +99,27 @@ app.use((req, res) => {
 });
 
 // Inicializar servidor
-const startServer = async () => {
+async function start() {
+  console.log('🚀 Iniciando backend...');
+
   try {
-    // Verificar conexión a BD
-    const result = await pool.query('SELECT NOW()');
-    console.log('✅ Conectado a PostgreSQL:', result.rows[0]);
-
     // Inicializar tablas
+    console.log('📍 Creando tablas...');
     await initializeTables();
+    console.log('✅ Tablas listas');
 
-    // Iniciar servidor
+    // Iniciar servidor Express
     app.listen(PORT, () => {
-      console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-      console.log(`📊 Documentación API: http://localhost:${PORT}/api/docs`);
-      console.log(`❤️  Health check: http://localhost:${PORT}/health`);
+      console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
+      console.log(`📊 API Docs: http://localhost:${PORT}/api/docs`);
+      console.log(`❤️  Health: http://localhost:${PORT}/health`);
     });
   } catch (err) {
-    console.error('❌ Error iniciando servidor:', err.message);
+    console.error('❌ ERROR:', err.message);
     process.exit(1);
   }
-};
+}
 
-startServer();
+start();
 
 module.exports = app;

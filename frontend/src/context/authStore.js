@@ -1,27 +1,35 @@
-import create from 'zustand';
+import React, { createContext, useState, useCallback } from 'react';
+import securityService from '../services/security';
 
-const useAuthStore = create((set) => ({
-  user: null,
-  token: null,
-  isLoading: false,
-  error: null,
+export const AuthContext = createContext();
 
-  // Cargar datos guardados del localStorage
-  init: () => {
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true); // true hasta que se revise localStorage
+  const [error, setError] = useState(null);
+
+  // Cargar datos guardados al iniciar
+  React.useEffect(() => {
     const savedToken = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
-
     if (savedToken && savedUser) {
-      set({
-        token: savedToken,
-        user: JSON.parse(savedUser)
-      });
+      try {
+        setToken(savedToken);
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        // Si el JSON está corrupto, limpiar
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
-  },
+    setIsInitializing(false); // Ya terminamos de revisar
+  }, []);
 
-  // Login
-  login: async (email, password) => {
-    set({ isLoading: true, error: null });
+  const login = useCallback(async (email, password) => {
+    setIsLoading(true);
+    setError(null);
     try {
       const response = await fetch('http://localhost:5000/api/auth/login', {
         method: 'POST',
@@ -35,26 +43,25 @@ const useAuthStore = create((set) => ({
       }
 
       const data = await response.json();
-
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
-
-      set({
-        token: data.token,
-        user: data.user,
-        isLoading: false
-      });
-
+      // Also store in sessionStorage for SecurityService
+      sessionStorage.setItem('auth_token', data.token);
+      securityService.logSecurityEvent('user_login', { email });
+      setToken(data.token);
+      setUser(data.user);
+      setIsLoading(false);
       return data;
     } catch (err) {
-      set({ error: err.message, isLoading: false });
+      setError(err.message);
+      setIsLoading(false);
       throw err;
     }
-  },
+  }, []);
 
-  // Registro
-  register: async (email, password, firstName, lastName) => {
-    set({ isLoading: true, error: null });
+  const register = useCallback(async (email, password, firstName, lastName) => {
+    setIsLoading(true);
+    setError(null);
     try {
       const response = await fetch('http://localhost:5000/api/auth/register', {
         method: 'POST',
@@ -68,20 +75,36 @@ const useAuthStore = create((set) => ({
       }
 
       const data = await response.json();
-      set({ isLoading: false });
+      setIsLoading(false);
       return data;
     } catch (err) {
-      set({ error: err.message, isLoading: false });
+      setError(err.message);
+      setIsLoading(false);
       throw err;
     }
-  },
+  }, []);
 
-  // Logout
-  logout: () => {
+  const logout = useCallback(() => {
+    securityService.logSecurityEvent('user_logout', { userId: user?.id });
+    securityService.clearSession();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    set({ user: null, token: null });
-  }
-}));
+    setUser(null);
+    setToken(null);
+  }, [user]);
 
-export default useAuthStore;
+  return (
+    <AuthContext.Provider value={{ user, token, isLoading, isInitializing, error, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// Hook para usar el contexto
+export function useAuth() {
+  const context = React.useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth debe ser usado dentro de AuthProvider');
+  }
+  return context;
+}
