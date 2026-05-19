@@ -75,6 +75,23 @@ export const userAPI = {
       headers: getAuthHeader()
     });
     return handleResponse(response);
+  },
+
+  updateUser: async (id, data) => {
+    const response = await fetch(`${API_URL}/users/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeader(),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(response);
+  },
+
+  deleteUser: async (id) => {
+    const response = await fetch(`${API_URL}/users/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeader()
+    });
+    return handleResponse(response);
   }
 };
 

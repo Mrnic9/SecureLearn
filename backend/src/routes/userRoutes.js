@@ -90,4 +90,71 @@ router.put('/me', authMiddleware, async (req, res) => {
   }
 });
 
+// Actualizar usuario por id (solo admin)
+router.put('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { id } = req.params;
+  const { firstName, lastName, role, isActive } = req.body;
+
+  try {
+    const existing = await get('SELECT id FROM users WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    await run(
+      `UPDATE users SET
+        first_name = COALESCE(?, first_name),
+        last_name  = COALESCE(?, last_name),
+        role       = COALESCE(?, role),
+        is_active  = COALESCE(?, is_active),
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [firstName || null, lastName || null, role || null, isActive !== undefined ? (isActive ? 1 : 0) : null, id]
+    );
+
+    const updated = await get(
+      'SELECT id, uuid, email, first_name, last_name, role, is_active, created_at FROM users WHERE id = ?',
+      [id]
+    );
+
+    securityLogger.info('admin_updated_user', { adminId: req.user.id, targetId: id, ip: req.ip });
+    res.json({
+      message: 'Usuario actualizado',
+      user: {
+        id: updated.id,
+        uuid: updated.uuid,
+        email: updated.email,
+        firstName: updated.first_name,
+        lastName: updated.last_name,
+        role: updated.role,
+        isActive: updated.is_active === 1,
+        createdAt: updated.created_at,
+      }
+    });
+  } catch (err) {
+    securityLogger.error('admin_update_user_failed', { adminId: req.user.id, targetId: id, reason: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Eliminar usuario por id (solo admin, no puede eliminarse a sí mismo)
+router.delete('/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+  const { id } = req.params;
+
+  if (parseInt(id) === req.user.id) {
+    return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
+  }
+
+  try {
+    const existing = await get('SELECT id, email FROM users WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    await run('DELETE FROM users WHERE id = ?', [id]);
+
+    securityLogger.warn('admin_deleted_user', { adminId: req.user.id, targetId: id, targetEmail: existing.email, ip: req.ip });
+    res.json({ message: 'Usuario eliminado correctamente' });
+  } catch (err) {
+    securityLogger.error('admin_delete_user_failed', { adminId: req.user.id, targetId: id, reason: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
