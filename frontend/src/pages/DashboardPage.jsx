@@ -1,15 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
 import { useAuth } from '../context/authStore';
+import { useToast } from '../context/toastStore';
 import { courseAPI } from '../services/api';
 import '../styles/dashboard.css';
+
+// ─── Skeleton de tarjeta de curso ─────────────────────────────────────────────
+function CourseCardSkeleton() {
+  return (
+    <div className="skeleton-card">
+      <div className="skeleton-card-top" />
+      <div className="skeleton skeleton-title" style={{ width: '70%' }} />
+      <div className="skeleton skeleton-text" />
+      <div className="skeleton skeleton-text" style={{ width: '80%' }} />
+      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+        <div className="skeleton skeleton-badge" />
+        <div className="skeleton skeleton-badge" />
+      </div>
+      <div className="skeleton skeleton-btn" style={{ marginTop: '0.5rem' }} />
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const history = useHistory();
   const { user } = useAuth();
+  const toast = useToast();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [enrolledCourses, setEnrolledCourses] = useState([]);
 
   useEffect(() => {
@@ -22,9 +40,8 @@ export default function DashboardPage() {
       setLoading(true);
       const data = await courseAPI.list();
       setCourses(data.courses || []);
-      setError('');
     } catch (err) {
-      setError(err.message || 'Error cargando cursos');
+      toast.error(err.message || 'Error cargando cursos');
     } finally {
       setLoading(false);
     }
@@ -35,8 +52,9 @@ export default function DashboardPage() {
     try {
       await courseAPI.enroll(courseId);
       setEnrolledCourses(prev => [...prev, courseId]);
+      toast.success('¡Inscripción exitosa! Ya puedes acceder al curso.');
     } catch (err) {
-      alert(err.message || 'Error en la inscripción');
+      toast.error(err.message || 'Error en la inscripción');
     }
   };
 
@@ -63,18 +81,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {error && (
-          <div className="alert error" style={{ marginBottom: '1.5rem' }}>{error}</div>
-        )}
-
         {/* Courses */}
         <div className="dashboard-section">
           <h2>📚 Cursos Disponibles</h2>
 
           {loading ? (
-            <div className="loading">
-              <div className="spinner"></div>
-              <p>Cargando cursos…</p>
+            <div className="courses-grid">
+              {[1, 2, 3, 4, 5, 6].map(i => <CourseCardSkeleton key={i} />)}
             </div>
           ) : courses.length === 0 ? (
             <div className="empty-state">
@@ -121,7 +134,7 @@ export default function DashboardPage() {
                 <span style={{ fontSize: '1.75rem' }}>👥</span>
                 Gestionar Usuarios
               </button>
-              <button className="btn-admin" onClick={() => alert('Auditoría en desarrollo')}>
+              <button className="btn-admin" onClick={() => toast.info('Módulo de Auditoría en desarrollo. Próximamente disponible.')}>
                 <span style={{ fontSize: '1.75rem' }}>📊</span>
                 Auditoría
               </button>
@@ -134,11 +147,11 @@ export default function DashboardPage() {
           <div className="dashboard-section">
             <h2>📖 Panel de Instructor</h2>
             <div className="admin-links">
-              <button className="btn-instructor" onClick={() => alert('Feature en desarrollo — Crear curso')}>
+              <button className="btn-instructor" onClick={() => toast.info('Crear curso: próximamente disponible.')}>
                 <span style={{ fontSize: '1.75rem' }}>➕</span>
                 Crear Nuevo Curso
               </button>
-              <button className="btn-instructor" onClick={() => alert('Feature en desarrollo — Mis cursos')}>
+              <button className="btn-instructor" onClick={() => toast.info('Mis Cursos: próximamente disponible.')}>
                 <span style={{ fontSize: '1.75rem' }}>📚</span>
                 Mis Cursos
               </button>

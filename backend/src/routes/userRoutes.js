@@ -1,6 +1,7 @@
 const express = require('express');
 const { get, all, run } = require('../config/database');
 const { authMiddleware, requireRole } = require('../middleware/authMiddleware');
+const securityLogger = require('../services/securityLogger');
 
 const router = express.Router();
 
@@ -32,6 +33,7 @@ router.get('/me', authMiddleware, async (req, res) => {
 
 // Listar usuarios (solo admin)
 router.get('/', authMiddleware, requireRole('admin'), async (req, res) => {
+  securityLogger.info('admin_list_users', { adminId: req.user.id, ip: req.ip });
   try {
     const users = await all(
       'SELECT id, uuid, email, first_name, last_name, role, is_active, created_at FROM users LIMIT 100'
@@ -70,6 +72,7 @@ router.put('/me', authMiddleware, async (req, res) => {
 
     const user = await get('SELECT id, uuid, email, first_name, last_name, role FROM users WHERE id = ?', [req.user.id]);
 
+    securityLogger.info('profile_updated', { userId: req.user.id, ip: req.ip });
     res.json({
       message: 'Perfil actualizado',
       user: {
@@ -82,6 +85,7 @@ router.put('/me', authMiddleware, async (req, res) => {
       }
     });
   } catch (err) {
+    securityLogger.error('profile_update_failed', { userId: req.user.id, ip: req.ip, reason: err.message });
     res.status(500).json({ error: err.message });
   }
 });

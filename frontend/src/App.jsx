@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Switch, Route, Redirect } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/authStore';
+import { ToastProvider } from './context/toastStore';
 import securityService from './services/security';
 import Header from './components/Header';
+import ErrorBoundary from './components/ErrorBoundary';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -12,6 +14,7 @@ import ProfilePage from './pages/ProfilePage';
 import CertificatesPage from './pages/CertificatesPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import SessionWarningModal from './components/SessionWarningModal';
+import Toast from './components/Toast';
 import './styles/globals.css';
 import './styles/home.css';
 import './styles/auth.css';
@@ -123,8 +126,13 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <AppContent />
+          <Toast />
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

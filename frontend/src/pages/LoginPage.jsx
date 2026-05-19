@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useHistory, Link } from 'react-router-dom';
 import { useAuth } from '../context/authStore';
+import { useToast } from '../context/toastStore';
 import securityService from '../services/security';
 import '../styles/auth.css';
 
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [emailError, setEmailError] = useState('');
   const history = useHistory();
   const { login, error, isLoading } = useAuth();
+  const toast = useToast();
 
   // Check for account lockout on email change
   useEffect(() => {
@@ -72,12 +74,11 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      // Clear failed attempts on successful login
       securityService.clearLoginAttempts(email);
       securityService.logSecurityEvent('login_success', { email });
+      toast.success('¡Bienvenido/a de nuevo!');
       history.push('/dashboard');
     } catch (err) {
-      // Record failed login attempt
       securityService.recordFailedLoginAttempt(email);
       const attempt = securityService.loginAttempts[email];
       const remaining = securityService.maxAttempts - attempt.attempts;
@@ -87,17 +88,17 @@ export default function LoginPage() {
         const mins = Math.ceil(lockoutRemaining / 60);
         setLockoutTimeRemaining(lockoutRemaining);
         setLockoutMessage(`🔒 Demasiados intentos fallidos. Cuenta bloqueada por ${mins} minuto${mins !== 1 ? 's' : ''}`);
+        toast.error(`Cuenta bloqueada por ${mins} minuto${mins !== 1 ? 's' : ''}. Intenta más tarde.`, 8000);
       } else {
         setLockoutMessage(`⚠️ Intento fallido. Intentos restantes: ${remaining}/${securityService.maxAttempts}`);
+        toast.warning(`Credenciales incorrectas. Intentos restantes: ${remaining}`);
       }
 
-      // Check for suspicious activity
       if (securityService.detectSuspiciousActivity(email)) {
         securityService.logSecurityEvent('suspicious_activity_detected', { email, attempts: attempt.attempts });
       }
 
       securityService.logSecurityEvent('login_failed', { email, remainingAttempts: remaining });
-      console.error(err);
     }
   };
 

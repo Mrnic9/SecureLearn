@@ -1,7 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
 import { useAuth } from '../context/authStore';
+import { useToast } from '../context/toastStore';
 import '../styles/admin.css';
+
+// ─── Skeleton fila de tabla ────────────────────────────────────────────────────
+function TableRowSkeleton() {
+  return (
+    <tr>
+      <td><div className="skeleton skeleton-text" style={{ width: '80%' }} /></td>
+      <td><div className="skeleton skeleton-text" style={{ width: '60%' }} /></td>
+      <td><div className="skeleton skeleton-badge" /></td>
+      <td><div className="skeleton skeleton-badge" style={{ width: '4rem' }} /></td>
+      <td><div className="skeleton skeleton-text" style={{ width: '5rem' }} /></td>
+      <td>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="skeleton skeleton-btn" style={{ width: '5rem' }} />
+          <div className="skeleton skeleton-btn" style={{ width: '5.5rem' }} />
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 const DEMO_USERS = [
   { id: 1, email: 'admin@securelearn.local',      firstName: 'Admin',  lastName: 'User',       role: 'admin',      isActive: true,  createdAt: new Date().toLocaleDateString() },
@@ -18,19 +38,25 @@ const ROLE_META = {
 export default function AdminUsersPage() {
   const history  = useHistory();
   const { user } = useAuth();
+  const toast    = useToast();
 
-  const [users,      setUsers]      = useState(DEMO_USERS);
+  const [users,      setUsers]      = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
   const [editingId,  setEditingId]  = useState(null);
   const [editData,   setEditData]   = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
-  const [message,    setMessage]    = useState('');
+  const [deletingId, setDeletingId] = useState(null); // para confirmación inline
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') history.push('/dashboard');
+    if (!user || user.role !== 'admin') { history.push('/dashboard'); return; }
+    // Simular carga de datos (en un proyecto real sería fetch al backend)
+    const t = setTimeout(() => {
+      setUsers(DEMO_USERS);
+      setLoadingData(false);
+    }, 600);
+    return () => clearTimeout(t);
   }, [user, history]);
-
-  const flash = (msg) => { setMessage(msg); setTimeout(() => setMessage(''), 3000); };
 
   const handleEdit   = (u) => { setEditingId(u.id); setEditData({ ...u }); };
   const handleCancel = ()  => { setEditingId(null); setEditData({}); };
@@ -38,13 +64,20 @@ export default function AdminUsersPage() {
   const handleSave = (id) => {
     setUsers(prev => prev.map(u => u.id === id ? editData : u));
     setEditingId(null);
-    flash('✅ Usuario actualizado correctamente');
+    toast.success('Usuario actualizado correctamente');
   };
 
   const handleDelete = (id) => {
-    if (window.confirm('¿Seguro que desea eliminar este usuario?')) {
+    if (deletingId === id) {
+      // Segunda pulsación = confirmado
       setUsers(prev => prev.filter(u => u.id !== id));
-      flash('✅ Usuario eliminado correctamente');
+      setDeletingId(null);
+      toast.success('Usuario eliminado correctamente');
+    } else {
+      // Primera pulsación = pedir confirmación
+      setDeletingId(id);
+      toast.warning('Pulsa "Eliminar" de nuevo para confirmar la eliminación');
+      setTimeout(() => setDeletingId(null), 5000);
     }
   };
 
@@ -73,9 +106,6 @@ export default function AdminUsersPage() {
             ← Volver
           </button>
         </div>
-
-        {/* Toast */}
-        {message && <div className="admin-toast">{message}</div>}
 
         {/* Stats */}
         <div className="admin-stats">
@@ -133,7 +163,9 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {loadingData ? (
+                [1, 2, 3].map(i => <TableRowSkeleton key={i} />)
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan="6" className="table-empty">No se encontraron usuarios</td></tr>
               ) : (
                 filtered.map(u => (
@@ -188,7 +220,12 @@ export default function AdminUsersPage() {
                         <td>
                           <div className="action-buttons">
                             <button className="btn-edit"   onClick={() => handleEdit(u)}>✏️ Editar</button>
-                            <button className="btn-delete" onClick={() => handleDelete(u.id)}>🗑️ Eliminar</button>
+                            <button
+                              className={`btn-delete${deletingId === u.id ? ' confirming' : ''}`}
+                              onClick={() => handleDelete(u.id)}
+                            >
+                              {deletingId === u.id ? '⚠️ ¿Confirmar?' : '🗑️ Eliminar'}
+                            </button>
                           </div>
                         </td>
                       </>

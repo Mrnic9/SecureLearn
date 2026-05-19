@@ -293,6 +293,18 @@
 .btn-save:hover   { background: var(--success); color: white; }
 .btn-cancel:hover { background: var(--border); }
 
+/* Estado de confirmación: dos clics para eliminar */
+.btn-delete.confirming {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border-color: rgba(245, 158, 11, 0.3);
+  animation: pulse 1s infinite;
+}
+.btn-delete.confirming:hover {
+  background: var(--warning);
+  color: white;
+}
+
 /* ===== TOGGLE SWITCH ===== */
 .switch {
   position: relative;

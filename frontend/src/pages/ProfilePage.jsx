@@ -1,8 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
 import { useAuth } from '../context/authStore';
+import { useToast } from '../context/toastStore';
 import { userAPI } from '../services/api';
 import '../styles/profile.css';
+
+// ─── Skeleton del perfil ───────────────────────────────────────────────────────
+function ProfileSkeleton() {
+  return (
+    <div className="profile-page">
+      {/* Hero skeleton */}
+      <div className="profile-hero" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+        <div className="profile-hero-inner" style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', padding: '2rem' }}>
+          <div className="skeleton skeleton-avatar" style={{ width: 80, height: 80 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
+            <div className="skeleton skeleton-title" style={{ width: 200 }} />
+            <div className="skeleton skeleton-text"  style={{ width: 160 }} />
+            <div className="skeleton skeleton-badge" />
+          </div>
+        </div>
+      </div>
+      {/* Body skeleton */}
+      <div className="profile-body">
+        <div className="skeleton-card" style={{ flex: 2 }}>
+          <div className="skeleton-card-top" />
+          <div className="skeleton skeleton-title" />
+          <div className="skeleton skeleton-text" />
+          <div className="skeleton skeleton-text" style={{ width: '75%' }} />
+          <div className="skeleton skeleton-text" style={{ width: '60%' }} />
+        </div>
+        <div className="skeleton-card" style={{ flex: 1 }}>
+          <div className="skeleton-card-top" />
+          <div className="skeleton skeleton-title" />
+          <div className="skeleton skeleton-text" />
+          <div className="skeleton skeleton-text" style={{ width: '80%' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ROLE_META = {
   admin:      { label: '👑 Administrador', icon: '👑' },
@@ -12,22 +48,17 @@ const ROLE_META = {
 
 export default function ProfilePage() {
   const history = useHistory();
-  const { user, login } = useAuth();
+  const { user, isInitializing } = useAuth();
+  const toast = useToast();
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData]   = useState({ firstName: '', lastName: '' });
   const [loading,  setLoading]    = useState(false);
-  const [toast,    setToast]      = useState(null); // { type, msg }
 
   useEffect(() => {
-    if (!user) { history.push('/login'); return; }
-    setFormData({ firstName: user.firstName || '', lastName: user.lastName || '' });
-  }, [user, history]);
-
-  const flash = (type, msg) => {
-    setToast({ type, msg });
-    setTimeout(() => setToast(null), 3500);
-  };
+    if (!isInitializing && !user) { history.push('/login'); return; }
+    if (user) setFormData({ firstName: user.firstName || '', lastName: user.lastName || '' });
+  }, [user, isInitializing, history]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -37,16 +68,16 @@ export default function ProfilePage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.firstName.trim() || !formData.lastName.trim()) {
-      flash('error', 'El nombre y apellido no pueden estar vacíos');
+      toast.error('El nombre y apellido no pueden estar vacíos');
       return;
     }
     setLoading(true);
     try {
       await userAPI.updateProfile(formData.firstName.trim(), formData.lastName.trim());
-      flash('success', 'Perfil actualizado correctamente');
+      toast.success('Perfil actualizado correctamente');
       setIsEditing(false);
     } catch (err) {
-      flash('error', err.message || 'Error al actualizar el perfil');
+      toast.error(err.message || 'Error al actualizar el perfil');
     } finally {
       setLoading(false);
     }
@@ -57,7 +88,7 @@ export default function ProfilePage() {
     setIsEditing(false);
   };
 
-  if (!user) return null;
+  if (isInitializing || !user) return <ProfileSkeleton />;
 
   const initials  = (user.firstName?.[0] || '') + (user.lastName?.[0] || '');
   const roleMeta  = ROLE_META[user.role] || { label: user.role, icon: '👤' };
@@ -98,13 +129,6 @@ export default function ProfilePage() {
 
         {/* ── MAIN COLUMN ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-          {/* Toast */}
-          {toast && (
-            <div className={`profile-toast ${toast.type}`}>
-              {toast.type === 'success' ? '✅' : '❌'} {toast.msg}
-            </div>
-          )}
 
           {/* Info / Edit Card */}
           <div className="profile-card">

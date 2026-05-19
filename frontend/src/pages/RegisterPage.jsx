@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useHistory, Link } from 'react-router-dom';
 import { useAuth } from '../context/authStore';
+import { useToast } from '../context/toastStore';
 import securityService from '../services/security';
 
 export default function RegisterPage() {
@@ -15,6 +16,7 @@ export default function RegisterPage() {
   const [emailError, setEmailError] = useState('');
   const history = useHistory();
   const { register, isLoading } = useAuth();
+  const toast = useToast();
 
   // Validate password strength in real-time
   useEffect(() => {
@@ -92,10 +94,12 @@ export default function RegisterPage() {
     try {
       await register(formData.email, formData.password, formData.firstName, formData.lastName);
       securityService.logSecurityEvent('user_registration_success', { email: formData.email });
+      toast.success('¡Cuenta creada correctamente! Ya puedes iniciar sesión.');
       history.push('/login');
     } catch (err) {
       securityService.logSecurityEvent('user_registration_failed', { email: formData.email, error: err.message });
       setError(err.message);
+      toast.error(err.message || 'Error al crear la cuenta');
     }
   };
 

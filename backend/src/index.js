@@ -2,45 +2,89 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { Client } = require('pg');
 require('dotenv').config();
 
-const { pool, initializeTables } = require('./config/database');
+const { initializeTables } = require('./config/database');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const courseRoutes = require('./routes/courseRoutes');
 const moduleRoutes = require('./routes/moduleRoutes');
 const quizRoutes = require('./routes/quizRoutes');
 const certificateRoutes = require('./routes/certificateRoutes');
+const securityLogger = require('./services/securityLogger');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware de seguridad
-app.use(helmet());
+// ─── Middleware de seguridad: Helmet con directivas específicas ────────────────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000, // 1 año
+    includeSubDomains: true,
+    preload: true,
+  },
+  noSniff: true,
+  xssFilter: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  frameguard: { action: 'deny' },
+}));
+
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
 }));
 
 // Body parser
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
-// Rate limiting en endpoints sensibles
+// ─── Rate limiting ─────────────────────────────────────────────────────────────
+// Login: más permisivo para evitar bloqueos en dev, saltea requests exitosos
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // 5 intentos
-  message: 'Demasiados intentos de acceso, intenta más tarde'
+  windowMs: 5 * 60 * 1000,           // ventana de 5 minutos
+  max: parseInt(process.env.RATE_LIMIT_MAX) || 20, // 20 intentos (dev); en prod poner 10
+  skipSuccessfulRequests: true,       // no cuenta logins exitosos
+  standardHeaders: true,             // devuelve RateLimit-* headers
+  legacyHeaders: false,              // desactiva X-RateLimit-*
+  message: {
+    error: 'Demasiados intentos de acceso. Espera unos minutos e intenta de nuevo.',
+    retryAfter: '5 minutos'
+  }
 });
 
-// Logging middleware
+// Registro: más estricto — 3 registros por hora por IP
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Has alcanzado el límite de registros. Intenta en una hora.',
+    retryAfter: '1 hora'
+  }
+});
+
+// ─── Logging middleware ────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
 });
 
-// Routes
+// ─── Routes ───────────────────────────────────────────────────────────────────
+app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/courses', courseRoutes);
@@ -84,11 +128,18 @@ app.get('/api/docs', (req, res) => {
   });
 });
 
-// Error handling
+// ─── Error handling global ────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
+  const status = err.status || 500;
   console.error('Error:', err.message);
-  res.status(err.status || 500).json({
-    error: err.message || 'Error interno del servidor',
+  securityLogger.error('unhandled_server_error', {
+    message: err.message,
+    path: req.path,
+    method: req.method,
+    ip: req.ip,
+  });
+  res.status(status).json({
+    error: status === 500 ? 'Error interno del servidor' : err.message,
     timestamp: new Date().toISOString()
   });
 });
