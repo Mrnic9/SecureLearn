@@ -134,6 +134,10 @@ export default function DashboardPage() {
                 <span style={{ fontSize: '1.75rem' }}>👥</span>
                 Gestionar Usuarios
               </button>
+              <button className="btn-admin" onClick={() => history.push('/courses/manage')}>
+                <span style={{ fontSize: '1.75rem' }}>📚</span>
+                Gestionar Cursos
+              </button>
               <button className="btn-admin" onClick={() => toast.info('Módulo de Auditoría en desarrollo. Próximamente disponible.')}>
                 <span style={{ fontSize: '1.75rem' }}>📊</span>
                 Auditoría
@@ -147,13 +151,13 @@ export default function DashboardPage() {
           <div className="dashboard-section">
             <h2>📖 Panel de Instructor</h2>
             <div className="admin-links">
-              <button className="btn-instructor" onClick={() => toast.info('Crear curso: próximamente disponible.')}>
-                <span style={{ fontSize: '1.75rem' }}>➕</span>
-                Crear Nuevo Curso
-              </button>
-              <button className="btn-instructor" onClick={() => toast.info('Mis Cursos: próximamente disponible.')}>
+              <button className="btn-instructor" onClick={() => history.push('/courses/manage')}>
                 <span style={{ fontSize: '1.75rem' }}>📚</span>
                 Mis Cursos
+              </button>
+              <button className="btn-instructor" onClick={() => { history.push('/courses/manage'); }}>
+                <span style={{ fontSize: '1.75rem' }}>➕</span>
+                Crear Nuevo Curso
               </button>
             </div>
           </div>

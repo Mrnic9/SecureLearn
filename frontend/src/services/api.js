@@ -97,8 +97,17 @@ export const userAPI = {
 
 // Course endpoints
 export const courseAPI = {
+  // Cursos publicados (público)
   list: async () => {
     const response = await fetch(`${API_URL}/courses`);
+    return handleResponse(response);
+  },
+
+  // Todos los cursos incluyendo borradores (admin/instructor)
+  listAll: async () => {
+    const response = await fetch(`${API_URL}/courses/all`, {
+      headers: getAuthHeader()
+    });
     return handleResponse(response);
   },
 
@@ -112,6 +121,32 @@ export const courseAPI = {
       method: 'POST',
       headers: getAuthHeader(),
       body: JSON.stringify(courseData)
+    });
+    return handleResponse(response);
+  },
+
+  update: async (id, courseData) => {
+    const response = await fetch(`${API_URL}/courses/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeader(),
+      body: JSON.stringify(courseData)
+    });
+    return handleResponse(response);
+  },
+
+  togglePublish: async (id, publish) => {
+    const response = await fetch(`${API_URL}/courses/${id}/publish`, {
+      method: 'PATCH',
+      headers: getAuthHeader(),
+      body: JSON.stringify({ publish })
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (id) => {
+    const response = await fetch(`${API_URL}/courses/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeader()
     });
     return handleResponse(response);
   },

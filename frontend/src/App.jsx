@@ -13,6 +13,7 @@ import CourseDetailPage from './pages/CourseDetailPage';
 import ProfilePage from './pages/ProfilePage';
 import CertificatesPage from './pages/CertificatesPage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import CourseManagementPage from './pages/CourseManagementPage';
 import SessionWarningModal from './components/SessionWarningModal';
 import Toast from './components/Toast';
 import './styles/globals.css';
@@ -117,6 +118,9 @@ function AppContent() {
           </PrivateRoute>
           <PrivateRoute exact path="/admin/users">
             <AdminUsersPage />
+          </PrivateRoute>
+          <PrivateRoute exact path="/courses/manage">
+            <CourseManagementPage />
           </PrivateRoute>
         </Switch>
       </Router>
